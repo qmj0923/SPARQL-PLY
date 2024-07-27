@@ -9,8 +9,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import (
-    List, Tuple, Optional, Union,
-    TypeVar, Generic,
+    List, Tuple, Optional, Union, TypeVar, Generic,
 )
 
 
@@ -46,10 +45,10 @@ class QueryComponent(ABC):
         if not self.DEBUG:
             return
 
-        print()
-        print(self.lexstart, self.lexstop, flush=True)
-        print(self.to_str(), flush=True)
-        print()
+        print(flush=True)
+        print(self.lexstart, self.lexstop, self.__class__.__name__)
+        print(self.to_str())
+        print(flush=True)
 
 
 #########################################################
@@ -87,13 +86,25 @@ class NodeTerm(QueryComponent):
     
     def __init__(
         self, lexstart: int, lexstop: int,
-        value: str, typ: int,
+        content: str, typ: int,
         language: Optional[str] = None,
         datatype: Optional[NodeTerm] = None,
     ):
         super().__init__(lexstart, lexstop)
-        self.value = value
         self.type = typ
+
+        if self.type & NodeTerm.BOOLEAN:
+            self.value = content.lower()
+        elif self.type & NodeTerm.ANON:
+            self.value = '[]'
+        elif self.type & NodeTerm.NIL:
+            self.value = '()'
+        elif self.type & NodeTerm.VAR:
+            self.value = '?' + content[1:]
+        elif self.type & NodeTerm.SPECIAL and content.upper() == 'UNDEF':
+            self.value = 'UNDEF'
+        else:
+            self.value = content
 
         if self.type & NodeTerm.RDF_LITERAL:
             self.language = language
@@ -140,7 +151,7 @@ class PropertyPath(QueryComponent):
     Each leaf node of the parse tree is a `NodeTerm` object, and
     it can be either an IRI or the keyword 'a'.
     '''
-    NOP           = 1 << 0  # No operation (for bracketted path)
+    NOP           = 1 << 0  # No operation (for bracketed path)
     UNARY_PREFIX  = 1 << 1  # !, ^
     UNARY_POSTFIX = 1 << 2  # ?, *, +
     BINARY_OP     = 1 << 3  # |, /
@@ -261,6 +272,8 @@ class TriplesPath(QueryComponent):
         super().__init__(lexstart, lexstop)
         self.subj = subj
         self.pred_obj_list = pred_obj_list
+        if self.pred_obj_list is None:
+            assert isinstance(self.subj, (CollectionPath, BlankNodePath))
 
         self._check()
 
@@ -284,7 +297,7 @@ class Expression(QueryComponent):
     '''
     [110] Expression
     '''
-    NOP               = 1 << 0  # No operation (for BrackettedExpression)
+    NOP               = 1 << 0  # No operation (for bracketed expression)
     UNARY_OP          = 1 << 1  # +, -, !
     BINARY_LOGICAL    = 1 << 2  # ||, &&
     BINARY_COMPARISON = 1 << 3  # =, !=, <, >, <=, >=
@@ -539,7 +552,7 @@ class GraphPattern(QueryComponent):
 #
 #########################################################
 
-# https://docs.python.org/zh-cn/3.6/library/typing.html
+# https://docs.python.org/3.6/library/typing.html
 T = TypeVar('T')
 
 class ComponentWrapper(QueryComponent, Generic[T]):

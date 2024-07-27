@@ -3,7 +3,6 @@ Copyright (c) 2024 qmj0923
 https://github.com/qmj0923/SPARQL-PLY
 '''
 
-from __future__ import annotations
 import os
 import sys
 from ply import lex, yacc
@@ -15,8 +14,8 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 from sparql_ply import sparql_lex
 from sparql_ply.sparql_lex import tokens
 from sparql_ply.components import (
-    NodeTerm, PropertyPath, CollectionPath, BlankNodePath,
-    TriplesPath, GraphPattern, Expression, Query, ComponentWrapper,
+    NodeTerm, PropertyPath, CollectionPath, BlankNodePath, TriplesPath,
+    GraphPattern, Expression, Query, QueryComponent, ComponentWrapper,
 )
 
 
@@ -105,9 +104,9 @@ def p_rdf_literal_0(p):
     '''
     rdf_literal : string
     '''
-    lexstart, lexstop, value = p[1]
+    lexstart, lexstop, content = p[1]
     p[0] = NodeTerm(
-        lexstart, lexstop, value,
+        lexstart, lexstop, content,
         NodeTerm.RDF_LITERAL,
     )
 
@@ -115,10 +114,10 @@ def p_rdf_literal_1(p):
     '''
     rdf_literal : string LANGTAG
     '''
-    lexstart, _, value = p[1]
+    lexstart, _, content = p[1]
     lexstop = p.lexpos(2) + len(str(p[2]))
     p[0] = NodeTerm(
-        lexstart, lexstop, value, 
+        lexstart, lexstop, content, 
         NodeTerm.RDF_LITERAL, language=str(p[2])[1:],
     )
 
@@ -126,10 +125,10 @@ def p_rdf_literal_2(p):
     '''
     rdf_literal : string DTYPE iri
     '''
-    lexstart, _, value = p[1]
+    lexstart, _, content = p[1]
     lexstop = p[3].lexstop
     p[0] = NodeTerm(
-        lexstart, lexstop, value,
+        lexstart, lexstop, content,
         NodeTerm.RDF_LITERAL, datatype=p[3],
     )
 
@@ -2760,6 +2759,7 @@ pass
 def parse(sparql, debug=False, start='query_unit'):
     lexer = lex.lex(module=sparql_lex, debug=debug)
     parser = yacc.yacc(start=start, debug=debug)
+    QueryComponent.DEBUG = debug
     return parser.parse(sparql, lexer=lexer)
 
 
@@ -2772,6 +2772,6 @@ if __name__ == '__main__':
     data = "PREFIX  rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX  wde:  <http://www.wikidata.org/entity/>\n\nSELECT  *\nWHERE\n  { _:b0  rdf:rest   ( wde:Q56061 ) }"
     start = 'query_unit'
 
-    print(parse(data, debug=False))
-    # print(parse(data, debug=True))
+    # print(parse(data, debug=False))
+    print(parse(data, debug=True))
 

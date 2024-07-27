@@ -4,7 +4,6 @@ https://github.com/qmj0923/SPARQL-PLY
 '''
 
 from __future__ import annotations
-
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import (

@@ -4,6 +4,7 @@ https://github.com/qmj0923/SPARQL-PLY
 
 Replace substrings in a given string using nested replacement strategies.
 '''
+
 from __future__ import annotations
 import itertools
 from collections import defaultdict
