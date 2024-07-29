@@ -10,7 +10,7 @@ import itertools
 from collections import defaultdict
 from copy import deepcopy
 from typing import (
-    List, Tuple, Dict, Callable, Optional, Union,
+    List, Tuple, Dict, Callable, Optional, Union, Any,
 )
 
 
@@ -220,10 +220,14 @@ class ReplacerFactory:
 
     @staticmethod
     def create_tree(
-        content: str, key2spans: Dict[str, List[Tuple[int, int]]]
+        content: str, key2spans: Dict[str, List[Tuple[int, int]]],
+        rank_key: Callable[[Optional[str]], Any] = lambda x: x,
     ) -> ReplacerNode:
         '''
         Make a replacer tree from a string and a dictionary of key to spans.
+        
+        For nodes with the same span, parent nodes always have smaller
+        `rank_key(key)` values than their children.
         '''
         def check_two_span(span1, span2):
             '''
@@ -232,6 +236,8 @@ class ReplacerFactory:
             start1, stop1 = span1
             start2, stop2 = span2
             return (
+                start1 <= stop1 and start2 <= stop2
+            ) and (
                 stop1 <= start2 or stop2 <= start1
                 or (start1 <= start2 and stop2 <= stop1)
                 or (start2 <= start1 and stop1 <= stop2)
@@ -253,7 +259,7 @@ class ReplacerFactory:
                 for key, span_list in key2spans.items()
                 for start, stop in span_list
             ],
-            key=lambda x: (x[2], -x[1]),
+            key=lambda x: (x[2], -x[1], -rank_key(x[0])),
         )
         mono_stack = list()
         for key, start, stop in node_list:

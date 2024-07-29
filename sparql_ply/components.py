@@ -59,9 +59,9 @@ class QueryComponent(ABC):
 #
 #########################################################
 class NodeTerm(QueryComponent):
-    """
+    '''
     GraphTerm | Var | 'a' | '*' | 'UNDEF'
-    """
+    '''
     RDF_LITERAL = 1 << 0  # 'RDFLiteral'
     BOOLEAN     = 1 << 1  # 'BooleanLiteral'
     INTEGER     = 1 << 2  # 'xsd_integer'
@@ -245,7 +245,7 @@ class BlankNodePath(QueryComponent):
 
     def to_str(self):
         po = '; '.join([
-            str(p) + ' ' + ', '.join([str(o) for o in ol])
+            f'{p} ' + ', '.join([str(o) for o in ol])
             for p, ol in self.pred_obj_list
         ])
         return '[' + po + ']'
@@ -282,10 +282,10 @@ class TriplesPath(QueryComponent):
             return str(self.subj)
 
         po = '; '.join([
-            str(p) + ' ' + ', '.join([str(o) for o in ol])
+            f'{p} ' + ', '.join([str(o) for o in ol])
             for p, ol in self.pred_obj_list
         ])
-        return f'{self.subj} {po}'
+        return str(self.subj) + ' ' + po
 
 
 #########################################################
@@ -435,7 +435,7 @@ class Expression(QueryComponent):
         elif self.type & Expression.BUILTIN_CALL:
             return call_handler[self.operator]()
         elif self.type & Expression.IRI_FUNC:
-            args = ", ".join([str(x) for x in self.children[1:]])
+            args = ', '.join([str(x) for x in self.children[1:]])
             return f'{self.children[0]}({args})'
         else:
             raise NotImplementedError
@@ -529,8 +529,8 @@ class GraphPattern(QueryComponent):
             | GraphPattern.SERVICE | GraphPattern.FILTER
         ):
             silent = 'SILENT ' if self.is_silent else ''
-            cs = ' '.join([str(x) for x in self.children])
-            return f'{self.TYPE2KEYWORD[self.type]} {silent}{cs}'
+            children = ' '.join([str(x) for x in self.children])
+            return f'{self.TYPE2KEYWORD[self.type]} {silent}{children}'
         elif self.type & GraphPattern.BIND:
             return f'BIND({self.children[0]} AS {self.children[1]})'
         elif self.type & GraphPattern.INLINE_DATA:

@@ -2763,13 +2763,8 @@ def parse(sparql, debug=False, start='query_unit'):
     return parser.parse(sparql, lexer=lexer)
 
 
-if __name__ == '__main__':
-    '''
-    data = ''
-    start = ''
-    '''
-    
-    data = "PREFIX  rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX  wde:  <http://www.wikidata.org/entity/>\n\nSELECT  *\nWHERE\n  { _:b0  rdf:rest   ( wde:Q56061 ) }"
+if __name__ == '__main__':   
+    data = 'PREFIX  rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX  wde:  <http://www.wikidata.org/entity/>\n\nSELECT  *\nWHERE\n  { _:b0  rdf:rest   ( wde:Q56061 ) }'
     start = 'query_unit'
 
     # print(parse(data, debug=False))

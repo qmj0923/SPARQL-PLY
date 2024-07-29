@@ -419,7 +419,7 @@ def t_error(t):
 
 
 if __name__ == '__main__':
-    data = "PREFIX  rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX  wde:  <http://www.wikidata.org/entity/>\n\nSELECT  *\nWHERE\n  { _:b0  rdf:rest   ( wde:Q56061 ) }"
+    data = 'PREFIX  rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX  wde:  <http://www.wikidata.org/entity/>\n\nSELECT  *\nWHERE\n  { _:b0  rdf:rest   ( wde:Q56061 ) }'
     lexer = lex()
     # lexer = lex(debug=True)
 
