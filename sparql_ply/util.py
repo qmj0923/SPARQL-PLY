@@ -43,10 +43,18 @@ def traverse(
         if isinstance(component, NodeTerm):
             pass
         elif isinstance(component, (
-            PropertyPath, CollectionPath, Expression, GraphPattern
+            PropertyPath, CollectionPath, Expression
         )):
             for child in component.children:
                 traverse(child, before, after)
+        elif isinstance(component, GraphPattern):
+            if component.type & GraphPattern.INLINE_DATA:
+                for row in component.children:
+                    for child in row:
+                        traverse(child, before, after)
+            else:
+                for child in component.children:
+                    traverse(child, before, after)
         elif isinstance(component, BlankNodePath):
             for p, ol in component.pred_obj_list:
                 traverse(p, before, after)
@@ -66,7 +74,7 @@ def traverse(
                 elif isinstance(component.target, Sequence):
                     for t in component.target:
                         if isinstance(t, NodeTerm):
-                            traverse(component.target, before, after)
+                            traverse(t, before, after)
                         elif isinstance(t, ComponentWrapper):
                             traverse(t[0], before, after)
                             traverse(t[1], before, after)
@@ -111,19 +119,15 @@ def traverse(
 
 
 def collect_component(
-    component: QueryComponent,
-    cls: Union[Type[QueryComponent], Tuple[Type[QueryComponent], ...]],
-    typ: Optional[int] = None,
+    component: QueryComponent, typ: int,
     skip: Callable[[QueryComponent], bool] = lambda x: False,
     prune: Callable[[QueryComponent], bool] = lambda x: False,
 ) -> List[QueryComponent]:
     def func(x: QueryComponent):
         nonlocal res
-        if isinstance(x, cls) and (typ is None or x.type & typ):
+        if x.type & typ:
             res.append(x)
 
-    if isinstance(cls, tuple) and typ is not None:
-        raise ValueError('Cannot specify `typ` for multiple classes.')                 
     res = []
     traverse(component, func, skip=skip, prune=prune)
     return res
@@ -167,7 +171,8 @@ class SyntaxFormExpander:
         self.collect_prologue(self.query)
 
         component_list = collect_component(self.query, (
-            NodeTerm, PropertyPath, CollectionPath, BlankNodePath, TriplesPath
+            NodeTerm.TYPE | PropertyPath.TYPE | CollectionPath.TYPE
+            | BlankNodePath.TYPE | TriplesPath.TYPE
         ))
         self.blank_gen = LabelGenerator(
             lambda x: f'_:b{x}',
@@ -185,7 +190,7 @@ class SyntaxFormExpander:
         ] = dict()
         for component in component_list:
             span = (component.lexstart, component.lexstop)
-            type_name = get_type_name(component)
+            type_name = get_name_from_type(component.type)
             key = f'{type_name}{span}'
             self.key2span[key] = span
             self.key2component[key] = component
@@ -575,7 +580,7 @@ def expand_syntax_form(
 
 
 COMPONENT_TYPE_INFO: List[Tuple[
-    Type[QueryComponent], Optional[int], str, Optional[str]
+    Type[QueryComponent], int, str, str
 ]]= [
     (NodeTerm, NodeTerm.RDF_LITERAL, 'NodeTerm', 'RDF_LITERAL'),
     (NodeTerm, NodeTerm.BOOLEAN, 'NodeTerm', 'BOOLEAN'),
@@ -593,9 +598,9 @@ COMPONENT_TYPE_INFO: List[Tuple[
     (PropertyPath, PropertyPath.UNARY_PREFIX, 'PropertyPath', 'UNARY_PREFIX'),
     (PropertyPath, PropertyPath.UNARY_POSTFIX, 'PropertyPath', 'UNARY_POSTFIX'),
     (PropertyPath, PropertyPath.BINARY_OP, 'PropertyPath', 'BINARY_OP'),
-    (CollectionPath, None, 'CollectionPath', None),
-    (BlankNodePath, None, 'BlankNodePath', None),
-    (TriplesPath, None, 'TriplesPath', None),
+    (CollectionPath, CollectionPath.TYPE, 'CollectionPath', 'COLLECTION_PATH'),
+    (BlankNodePath, BlankNodePath.TYPE, 'BlankNodePath', 'BLANK_NODE_PATH'),
+    (TriplesPath, TriplesPath.TYPE, 'TriplesPath', 'TRIPLES_PATH'),
     (Expression, Expression.NOP, 'Expression', 'NOP'),
     (Expression, Expression.UNARY_OP, 'Expression', 'UNARY_OP'),
     (Expression, Expression.BINARY_LOGICAL, 'Expression', 'BINARY_LOGICAL'),
@@ -630,24 +635,29 @@ COMPONENT_TYPE_INFO: List[Tuple[
 
 
 COMPONENT_TYPE_DICT = {
-    (cls, typ): (cls_str, type_str)
-    for cls, typ, cls_str, type_str in COMPONENT_TYPE_INFO
+    typ: (cls, typ, cls_str, sub_type_str)
+    for cls, typ, cls_str, sub_type_str in COMPONENT_TYPE_INFO
+}
+
+COMPONENT_NAME_DICT = {
+    f'{cls_str}.{sub_type_str}': (cls, typ, cls_str, sub_type_str)
+    for cls, typ, cls_str, sub_type_str in COMPONENT_TYPE_INFO
 }
 
 
-def get_type_str(component: QueryComponent) -> Optional[str]:
-    cls = component.__class__
-    typ = getattr(component, 'type', None)
-    _, type_str = COMPONENT_TYPE_DICT[(cls, typ)]
-    return type_str
+def get_type_from_name(name: str) -> int:
+    _, typ, _, _ = COMPONENT_NAME_DICT[name]
+    return typ
 
 
-def get_type_name(component: QueryComponent) -> str:
-    cls = component.__class__
-    typ = getattr(component, 'type', None)
-    cls_str, type_str = COMPONENT_TYPE_DICT[(cls, typ)]
-    res = f'{cls_str}.{type_str}' if type_str is not None else cls_str
-    return res
+def get_name_from_type(typ: int) -> str:
+    _, _, cls_str, sub_type_str = COMPONENT_TYPE_DICT[typ]
+    return f'{cls_str}.{sub_type_str}'
+
+
+def get_class_from_type(typ: int) -> Type[QueryComponent]:
+    cls, _, _, _ = COMPONENT_TYPE_DICT[typ]
+    return cls
 
 
 if __name__ == '__main__':   

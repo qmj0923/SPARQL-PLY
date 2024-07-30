@@ -4,7 +4,7 @@ https://github.com/qmj0923/SPARQL-PLY
 '''
 
 from __future__ import annotations
-
+import itertools
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
@@ -13,11 +13,26 @@ from typing import (
 )
 
 
+def gen_type() -> int:
+    try:
+        bit = gen_type.__bit
+    except AttributeError:
+        gen_type.__bit = itertools.count(0)
+        bit = gen_type.__bit
+    return 1 << next(bit)
+
+
 class QueryComponent(ABC):
+    '''
+    Abstract base class for all components of a SPARQL query.
+    '''
     DEBUG = False
-    def __init__(self, lexstart: int, lexstop: int):
+
+    def __init__(self, lexstart: int, lexstop: int, typ: int):
         self.lexstart = lexstart
         self.lexstop = lexstop
+        self.type = typ
+        self._check()
 
     @abstractmethod
     def to_str(self) -> str:
@@ -46,7 +61,8 @@ class QueryComponent(ABC):
             return
 
         print(flush=True)
-        print(self.lexstart, self.lexstop, self.__class__.__name__)
+        print(self.__class__.__name__, self.type)
+        print(self.lexstart, self.lexstop)
         print(self.to_str())
         print(flush=True)
 
@@ -62,20 +78,20 @@ class NodeTerm(QueryComponent):
     '''
     GraphTerm | Var | 'a' | '*' | 'UNDEF'
     '''
-    RDF_LITERAL = 1 << 0  # 'RDFLiteral'
-    BOOLEAN     = 1 << 1  # 'BooleanLiteral'
-    INTEGER     = 1 << 2  # 'xsd_integer'
-    DECIMAL     = 1 << 3  # 'xsd_decimal'
-    DOUBLE      = 1 << 4  # 'xsd_double'
+    RDF_LITERAL = gen_type()  # 'RDFLiteral'
+    BOOLEAN     = gen_type()  # 'BooleanLiteral'
+    INTEGER     = gen_type()  # 'xsd_integer'
+    DECIMAL     = gen_type()  # 'xsd_decimal'
+    DOUBLE      = gen_type()  # 'xsd_double'
     
-    IRIREF           = 1 << 10  # 'IRIREF'
-    PREFIXED_NAME    = 1 << 11  # 'PrefixedName'
-    BLANK_NODE_LABEL = 1 << 12  # 'BLANK_NODE_LABEL'
-    ANON             = 1 << 13  # 'ANON'
-    NIL              = 1 << 14  # 'NIL'
+    IRIREF           = gen_type()  # 'IRIREF'
+    PREFIXED_NAME    = gen_type()  # 'PrefixedName'
+    BLANK_NODE_LABEL = gen_type()  # 'BLANK_NODE_LABEL'
+    ANON             = gen_type()  # 'ANON'
+    NIL              = gen_type()  # 'NIL'
 
-    VAR     = 1 << 20  # 'Var'
-    SPECIAL = 1 << 21  # 'a', '*', 'UNDEF'
+    VAR     = gen_type()  # 'Var'
+    SPECIAL = gen_type()  # 'a', '*', 'UNDEF'
 
     NUMERIC = INTEGER | DECIMAL | DOUBLE
     IRI = IRIREF | PREFIXED_NAME 
@@ -84,36 +100,38 @@ class NodeTerm(QueryComponent):
     # RDF_TERM = IRI | RDF_LITERAL | BLANK_NODE
     # GRAPH_TERM = IRI | RDF_LITERAL | NUMERIC | BOOLEAN | BLANK_NODE | NIL
     
+    TYPE = (
+        RDF_LITERAL | BOOLEAN | INTEGER | DECIMAL | DOUBLE | IRIREF
+        | PREFIXED_NAME | BLANK_NODE_LABEL | ANON | NIL | VAR | SPECIAL
+    )
+    
     def __init__(
         self, lexstart: int, lexstop: int,
         content: str, typ: int,
         language: Optional[str] = None,
         datatype: Optional[NodeTerm] = None,
     ):
-        super().__init__(lexstart, lexstop)
-        self.type = typ
-
-        if self.type & NodeTerm.BOOLEAN:
+        if typ & NodeTerm.BOOLEAN:
             self.value = content.lower()
-        elif self.type & NodeTerm.ANON:
+        elif typ & NodeTerm.ANON:
             self.value = '[]'
-        elif self.type & NodeTerm.NIL:
+        elif typ & NodeTerm.NIL:
             self.value = '()'
-        elif self.type & NodeTerm.VAR:
+        elif typ & NodeTerm.VAR:
             self.value = '?' + content[1:]
-        elif self.type & NodeTerm.SPECIAL and content.upper() == 'UNDEF':
+        elif typ & NodeTerm.SPECIAL and content.upper() == 'UNDEF':
             self.value = 'UNDEF'
         else:
             self.value = content
 
-        if self.type & NodeTerm.RDF_LITERAL:
+        if typ & NodeTerm.RDF_LITERAL:
             self.language = language
             self.xsd_datatype = datatype
         else:
             self.language = None
             self.xsd_datatype = None
         
-        self._check()
+        super().__init__(lexstart, lexstop, typ)
 
     def to_str(self):
         res = self.value
@@ -151,38 +169,38 @@ class PropertyPath(QueryComponent):
     Each leaf node of the parse tree is a `NodeTerm` object, and
     it can be either an IRI or the keyword 'a'.
     '''
-    NOP           = 1 << 0  # No operation (for bracketed path)
-    UNARY_PREFIX  = 1 << 1  # !, ^
-    UNARY_POSTFIX = 1 << 2  # ?, *, +
-    BINARY_OP     = 1 << 3  # |, /
+    NOP           = gen_type()  # No operation (for bracketed path)
+    UNARY_PREFIX  = gen_type()  # !, ^
+    UNARY_POSTFIX = gen_type()  # ?, *, +
+    BINARY_OP     = gen_type()  # |, /
 
     UNARY_OP = UNARY_PREFIX | UNARY_POSTFIX
+    TYPE = NOP | UNARY_PREFIX | UNARY_POSTFIX | BINARY_OP
 
     def __init__(
         self, lexstart: int, lexstop: int,
         children: List[Union[PropertyPath, NodeTerm]],
         operator: Optional[str] = None,
-    ):  
-        super().__init__(lexstart, lexstop)
+    ):
         self.children = children
         self.operator = operator
         
         if self.operator is None:
             assert len(self.children) == 1
-            self.type = PropertyPath.NOP
+            typ = PropertyPath.NOP
         elif self.operator in ['^', '!']:
             assert len(self.children) == 1
-            self.type = PropertyPath.UNARY_PREFIX
+            typ = PropertyPath.UNARY_PREFIX
         elif self.operator in ['?', '*', '+']:
             assert len(self.children) == 1
-            self.type = PropertyPath.UNARY_POSTFIX
+            typ = PropertyPath.UNARY_POSTFIX
         elif self.operator in ['|', '/']:
             assert len(self.children) >= 2
-            self.type = PropertyPath.BINARY_OP
+            typ = PropertyPath.BINARY_OP
         else:
             raise NotImplementedError
 
-        self._check()
+        super().__init__(lexstart, lexstop, typ)
 
     def to_str(self):
         if self.type & PropertyPath.BINARY_OP:
@@ -207,14 +225,18 @@ class PropertyPath(QueryComponent):
 #########################################################
 
 class CollectionPath(QueryComponent):
+    '''
+    [102] Collection
+    [103] CollectionPath
+    '''
+    TYPE = gen_type()
+
     def __init__(
         self, lexstart: int, lexstop: int,
         children: List[Union[NodeTerm, CollectionPath, BlankNodePath]]
     ):
-        super().__init__(lexstart, lexstop)
         self.children = children
-        
-        self._check()
+        super().__init__(lexstart, lexstop, CollectionPath.TYPE)
 
     def to_str(self):
         return '(' + ' '.join([str(x) for x in self.children]) + ')'
@@ -231,6 +253,8 @@ class BlankNodePath(QueryComponent):
     [99]  BlankNodePropertyList ::= '[' PropertyListNotEmpty ']'
     [101] BlankNodePropertyListPath ::= '[' PropertyListPathNotEmpty ']'
     '''
+    TYPE = gen_type()
+
     def __init__(
         self, lexstart: int, lexstop: int,
         pred_obj_list: List[Tuple[
@@ -238,10 +262,8 @@ class BlankNodePath(QueryComponent):
             List[Union[NodeTerm, CollectionPath, BlankNodePath]],
         ]],
     ):
-        super().__init__(lexstart, lexstop)
         self.pred_obj_list = pred_obj_list
-        
-        self._check()
+        super().__init__(lexstart, lexstop, BlankNodePath.TYPE)
 
     def to_str(self):
         po = '; '.join([
@@ -261,6 +283,8 @@ class TriplesPath(QueryComponent):
     '''
     [81] TriplesSameSubjectPath
     '''
+    TYPE = gen_type()
+
     def __init__(
         self, lexstart: int, lexstop: int,
         subj: Union[NodeTerm, CollectionPath, BlankNodePath], 
@@ -269,13 +293,12 @@ class TriplesPath(QueryComponent):
             List[Union[NodeTerm, CollectionPath, BlankNodePath]],
         ]]],
     ):
-        super().__init__(lexstart, lexstop)
         self.subj = subj
         self.pred_obj_list = pred_obj_list
         if self.pred_obj_list is None:
             assert isinstance(self.subj, (CollectionPath, BlankNodePath))
 
-        self._check()
+        super().__init__(lexstart, lexstop, TriplesPath.TYPE)
 
     def to_str(self):
         if self.pred_obj_list is None:
@@ -297,26 +320,35 @@ class Expression(QueryComponent):
     '''
     [110] Expression
     '''
-    NOP               = 1 << 0  # No operation (for bracketed expression)
-    UNARY_OP          = 1 << 1  # +, -, !
-    BINARY_LOGICAL    = 1 << 2  # ||, &&
-    BINARY_COMPARISON = 1 << 3  # =, !=, <, >, <=, >=
-    BINARY_ARITHMETIC = 1 << 4  # +, -, *, /
-    IN_OP             = 1 << 5  # IN, NOT IN
+    NOP               = gen_type()  # No operation (for bracketed expression)
+    UNARY_OP          = gen_type()  # +, -, !
+    BINARY_LOGICAL    = gen_type()  # ||, &&
+    BINARY_COMPARISON = gen_type()  # =, !=, <, >, <=, >=
+    BINARY_ARITHMETIC = gen_type()  # +, -, *, /
+    IN_OP             = gen_type()  # IN, NOT IN
     
-    FUNC_FORM    = 1 << 10  # Functional Forms (not operators)
-    FUNC_TERM    = 1 << 11  # Functions on RDF Terms
-    FUNC_STR     = 1 << 12  # Functions on Strings
-    FUNC_NUMERIC = 1 << 13  # Functions on Numerics
-    FUNC_TIME    = 1 << 14  # Functions on Dates and Times
-    FUNC_HASH    = 1 << 15  # Hash Functions
-    AGGREGATE    = 1 << 16  # Aggregate Functions
-    IRI_FUNC     = 1 << 20  # Functions named by an IRI
+    FUNC_FORM    = gen_type()  # Functional Forms (not operators)
+    FUNC_TERM    = gen_type()  # Functions on RDF Terms
+    FUNC_STR     = gen_type()  # Functions on Strings
+    FUNC_NUMERIC = gen_type()  # Functions on Numerics
+    FUNC_TIME    = gen_type()  # Functions on Dates and Times
+    FUNC_HASH    = gen_type()  # Hash Functions
+    AGGREGATE    = gen_type()  # Aggregate Functions
+    IRI_FUNC     = gen_type()  # Functions named by an IRI
     
     BINARY_OP    = BINARY_LOGICAL | BINARY_COMPARISON | BINARY_ARITHMETIC
-    BUILTIN_CALL = FUNC_FORM | FUNC_TERM | FUNC_STR | FUNC_NUMERIC | FUNC_TIME | FUNC_HASH | AGGREGATE
+    BUILTIN_CALL = (
+        FUNC_FORM | FUNC_TERM | FUNC_STR | FUNC_NUMERIC | FUNC_TIME
+        | FUNC_HASH | AGGREGATE
+    )
     CALL         = BUILTIN_CALL | IRI_FUNC
-    
+
+    TYPE = (
+        NOP | UNARY_OP | BINARY_LOGICAL | BINARY_COMPARISON
+        | BINARY_ARITHMETIC | IN_OP | FUNC_FORM | FUNC_TERM | FUNC_STR
+        | FUNC_NUMERIC | FUNC_TIME | FUNC_HASH | AGGREGATE | IRI_FUNC
+    )
+
     TYPE2FUNCTIONS = {
         FUNC_FORM: [
             'BOUND', 'COALESCE', 'IF', 'SAMETERM',
@@ -359,44 +391,44 @@ class Expression(QueryComponent):
         operator: Optional[str] = None,
         is_distinct: bool = False,
     ):
-        super().__init__(lexstart, lexstop)
         self.children = children
         self.operator = operator.upper() if operator else None
         self.is_distinct = is_distinct
         
         if self.operator is None:
             assert len(self.children) == 1
-            self.type = Expression.NOP
+            typ = Expression.NOP
         elif (
             self.operator in ['+', '-', '!']
             and len(self.children) == 1
         ):
-            self.type = Expression.UNARY_OP
+            typ = Expression.UNARY_OP
         elif self.operator in ['||', '&&']:
-            self.type = Expression.BINARY_LOGICAL
+            typ = Expression.BINARY_LOGICAL
         elif self.operator in ['=', '!=', '<', '>', '<=', '>=']:
             assert len(self.children) == 2
-            self.type = Expression.BINARY_COMPARISON
+            typ = Expression.BINARY_COMPARISON
         elif (
             self.operator in ['+', '-', '*', '/']
             and len(self.children) >= 2
         ):
             if self.operator in ['-', '/']:
                 assert len(self.children) == 2
-            self.type = Expression.BINARY_ARITHMETIC
+            typ = Expression.BINARY_ARITHMETIC
         elif self.operator in ['IN', 'NOT IN']:
-            self.type = Expression.IN_OP
+            typ = Expression.IN_OP
         elif self.operator in Expression.FUNC2TYPE:
-            self.type = Expression.FUNC2TYPE[self.operator]
+            typ = Expression.FUNC2TYPE[self.operator]
         elif self.operator == 'IRI_FUNC':
             assert (
                 self.children and isinstance(self.children[0], NodeTerm)
                 and self.children[0].type & NodeTerm.IRI
             )
-            self.type = Expression.IRI_FUNC
+            typ = Expression.IRI_FUNC
         else:
             raise NotImplementedError
-        self._check()
+
+        super().__init__(lexstart, lexstop, typ)
 
     def to_str(self):
         def call_to_str():
@@ -450,17 +482,22 @@ class GraphPattern(QueryComponent):
     '''
     Elements that can be part of a Group Graph Pattern.
     '''
-    TRIPLES_BLOCK = 1 << 0  # TriplesBlock
-    GROUP         = 1 << 1  # GroupGraphPattern
-    UNION         = 1 << 2  # UnionGraphPattern
-    OPTIONAL      = 1 << 3  # OptionalGraphPattern
-    MINUS         = 1 << 4  # MinusGraphPattern
-    GRAPH         = 1 << 5  # GraphGraphPattern
-    SERVICE       = 1 << 6  # ServiceGraphPattern
-    FILTER        = 1 << 7  # Filter
-    BIND          = 1 << 8  # Bind
-    INLINE_DATA   = 1 << 9  # InlineData
-    SUB_SELECT    = 1 << 10  # SubSelect
+    TRIPLES_BLOCK = gen_type()  # TriplesBlock
+    GROUP         = gen_type()  # GroupGraphPattern
+    UNION         = gen_type()  # UnionGraphPattern
+    OPTIONAL      = gen_type()  # OptionalGraphPattern
+    MINUS         = gen_type()  # MinusGraphPattern
+    GRAPH         = gen_type()  # GraphGraphPattern
+    SERVICE       = gen_type()  # ServiceGraphPattern
+    FILTER        = gen_type()  # Filter
+    BIND          = gen_type()  # Bind
+    INLINE_DATA   = gen_type()  # InlineData
+    SUB_SELECT    = gen_type()  # SubSelect
+    
+    TYPE = (
+        TRIPLES_BLOCK | GROUP | UNION | OPTIONAL | MINUS | GRAPH
+        | SERVICE | FILTER | BIND | INLINE_DATA | SUB_SELECT
+    )
     
     TYPE2KEYWORD = {
         TRIPLES_BLOCK: None,
@@ -506,16 +543,14 @@ class GraphPattern(QueryComponent):
         typ: int,
         is_silent: bool = False,
     ):
-        super().__init__(lexstart, lexstop)
         self.children = children
-        self.type = typ
         self.is_silent = is_silent
         
         if self.is_silent:
-            assert self.type & GraphPattern.SERVICE
-        assert self.CHILDREN_CHECKER[self.type](self.children)
+            assert typ & GraphPattern.SERVICE
+        assert self.CHILDREN_CHECKER[typ](self.children)
         
-        self._check()
+        super().__init__(lexstart, lexstop, typ)
 
     def to_str(self):
         if self.type & GraphPattern.TRIPLES_BLOCK:
@@ -556,19 +591,21 @@ class GraphPattern(QueryComponent):
 T = TypeVar('T')
 
 class ComponentWrapper(QueryComponent, Generic[T]):
+    '''
+    Wrapper for a single value or a sequence of values.
+    '''
     def __init__(self, lexstart: int, lexstop: int, value: T):
-        QueryComponent.__init__(self, lexstart, lexstop)
         if isinstance(value, (QueryComponent, str)):
             self.is_single = True
         elif isinstance(value, Sequence):
             self.is_single = False
         else:
             raise TypeError(
-                f'{value} at position {self.lexstart} is not a valid value'
-                ' for ComponentWrapper.'
+                f'{value} at position {lexstart} is not a valid value '
+                'for ComponentWrapper.'
             )
         self.value = value
-        self._check()
+        QueryComponent.__init__(self, lexstart, lexstop, 0)
 
     def to_str(self) -> str:
         if self.is_single:
@@ -601,11 +638,13 @@ class Query(QueryComponent):
     '''
     SPARQL Query
     '''
-    SELECT    = 1 << 0  # SelectQuery
-    CONSTRUCT = 1 << 1  # ConstructQuery
-    DESCRIBE  = 1 << 2  # DescribeQuery
-    ASK       = 1 << 3  # AskQuery
-    SUB_SELECT = 1 << 10  # SubSelect
+    SELECT     = gen_type()  # SelectQuery
+    CONSTRUCT  = gen_type()  # ConstructQuery
+    DESCRIBE   = gen_type()  # DescribeQuery
+    ASK        = gen_type()  # AskQuery
+    SUB_SELECT = gen_type()  # SubSelect
+    
+    TYPE = SELECT | CONSTRUCT | DESCRIBE | ASK | SUB_SELECT
 
     TYPE2KEYWORD = {
         SELECT: 'SELECT',
@@ -657,10 +696,6 @@ class Query(QueryComponent):
         ]] = None,
         raw_sparql: Optional[str] = None,
     ):
-        self.lexstart = lexstart
-        self.lexstop = lexstop
-        self.type = typ
-        
         self.prologue = prologue
         self.select_modifier = select_modifier
         self.target = target
@@ -677,14 +712,14 @@ class Query(QueryComponent):
         self.raw_sparql = raw_sparql
 
         if self.select_modifier is not None:
-            assert self.type & (Query.SELECT | Query.SUB_SELECT)
+            assert typ & (Query.SELECT | Query.SUB_SELECT)
             assert self.select_modifier in ['DISTINCT', 'REDUCED']
 
-        if self.type & Query.SUB_SELECT:
+        if typ & Query.SUB_SELECT:
             assert self.prologue is None
             assert self.dataset is None
             assert self.raw_sparql is None
-        elif self.type & Query.CONSTRUCT:
+        elif typ & Query.CONSTRUCT:
             if isinstance(self.target, GraphPattern):
                 assert len(self.target.children) <= 1
                 if self.target.children:
@@ -695,10 +730,10 @@ class Query(QueryComponent):
                     )
             else:
                 assert self.target is None
-        elif self.type & Query.ASK:
+        elif typ & Query.ASK:
             assert self.target is None
 
-        self._check()
+        super().__init__(lexstart, lexstop, typ)
         
     def to_str(self):
         res = ''

@@ -32,7 +32,6 @@ tokens = [
     'KW_A',
 ] + list(SPARQL_KEYWORDS_CASE_INSENSITIVE)
 
-
 # https://stackoverflow.com/questions/34712838/which-special-characters-must-be-escaped-when-using-python-regex-module-re
 # https://stackoverflow.com/questions/399078/what-special-characters-must-be-escaped-in-regular-expressions
 
@@ -75,7 +74,6 @@ t_QMARK = r'[?]'
 
 t_ignore = ' \t\r\f'
 t_ignore_COMMENT = r'\#.*'
-
 
 ############################################################
 #
