@@ -36,6 +36,9 @@ def traverse(
     skip: Callable[[QueryComponent], bool] = lambda x: False,
     prune: Callable[[QueryComponent], bool] = lambda x: False,
 ):
+    '''
+    Traverse the component tree.
+    '''
     if skip(component):
         return
     before(component)
@@ -123,6 +126,9 @@ def collect_component(
     skip: Callable[[QueryComponent], bool] = lambda x: False,
     prune: Callable[[QueryComponent], bool] = lambda x: False,
 ) -> List[QueryComponent]:
+    '''
+    Collect components of specific types.
+    '''
     def func(x: QueryComponent):
         nonlocal res
         if x.type & typ:
@@ -134,6 +140,9 @@ def collect_component(
 
 
 class LabelGenerator:
+    '''
+    Generator for unique labels.
+    '''
     def __init__(
         self,
         gen_func: Callable[[int], str] = lambda x: str(x),
@@ -159,7 +168,7 @@ class SyntaxFormExpander:
     '''
     def __init__(
         self, sparql: str, 
-        default_prefix_dict: Optional[dict[str, str]] = None,
+        default_prefix_dict: Optional[Dict[str, str]] = None,
     ):
         self.sparql = sparql
         self.base_url: Optional[str] = None
@@ -533,7 +542,7 @@ class SyntaxFormExpander:
 
 def expand_syntax_form(
     sparql: str,
-    default_prefix_dict: Optional[dict[str, str]] = None,
+    default_prefix_dict: Optional[Dict[str, str]] = None,
     expand_keyword_a: bool = True,
     expand_iri: bool = True,
     expand_rdf_collection: bool = True,
