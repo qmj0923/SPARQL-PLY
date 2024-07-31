@@ -74,6 +74,7 @@ class QueryComponent(ABC):
 #  (leaf nodes of the parse tree)
 #
 #########################################################
+
 class NodeTerm(QueryComponent):
     '''
     GraphTerm | Var | 'a' | '*' | 'UNDEF'
@@ -126,10 +127,10 @@ class NodeTerm(QueryComponent):
 
         if typ & NodeTerm.RDF_LITERAL:
             self.language = language
-            self.xsd_datatype = datatype
+            self.datatype = datatype
         else:
             self.language = None
-            self.xsd_datatype = None
+            self.datatype = None
         
         super().__init__(lexstart, lexstop, typ)
 
@@ -138,8 +139,8 @@ class NodeTerm(QueryComponent):
         if self.type & NodeTerm.RDF_LITERAL:
             if self.language is not None:
                 res += '@' + self.language
-            if self.xsd_datatype is not None:
-                res += '^^' + str(self.xsd_datatype)
+            if self.datatype is not None:
+                res += '^^' + str(self.datatype)
         return res
 
     def __eq__(self, other):
@@ -148,7 +149,7 @@ class NodeTerm(QueryComponent):
             and self.value == other.value
             and self.type == other.type
             and self.language == self.language
-            and self.xsd_datatype == self.xsd_datatype
+            and self.datatype == self.datatype
         )
 
     def __hash__(self):
@@ -226,8 +227,7 @@ class PropertyPath(QueryComponent):
 
 class CollectionPath(QueryComponent):
     '''
-    [102] Collection
-    [103] CollectionPath
+    [102] Collection & [103] CollectionPath
     '''
     TYPE = gen_type()
 
@@ -250,8 +250,7 @@ class CollectionPath(QueryComponent):
 
 class BlankNodePath(QueryComponent):
     '''
-    [99]  BlankNodePropertyList ::= '[' PropertyListNotEmpty ']'
-    [101] BlankNodePropertyListPath ::= '[' PropertyListPathNotEmpty ']'
+    [99]  BlankNodePropertyList & [101] BlankNodePropertyListPath
     '''
     TYPE = gen_type()
 
@@ -316,6 +315,7 @@ class TriplesPath(QueryComponent):
 #  Expression
 #
 #########################################################
+
 class Expression(QueryComponent):
     '''
     [110] Expression
@@ -478,6 +478,7 @@ class Expression(QueryComponent):
 #  GraphPattern
 #
 #########################################################
+
 class GraphPattern(QueryComponent):
     '''
     Elements that can be part of a Group Graph Pattern.
@@ -743,7 +744,6 @@ class Query(QueryComponent):
                 for row in self.prologue
             ]) + '\n'
         res += self.TYPE2KEYWORD[self.type]
-        
         if self.select_modifier is not None:
             res += ' ' + str(self.select_modifier)
         if self.target is not None:
@@ -759,7 +759,6 @@ class Query(QueryComponent):
                         raise NotImplementedError
             else:
                 raise NotImplementedError
-
         if self.dataset is not None: 
             res += '\n' + '\n'.join([
                 ' '.join([str(x) for x in d])
@@ -767,6 +766,7 @@ class Query(QueryComponent):
             ])
         if self.pattern is not None:
             res += '\nWHERE ' + str(self.pattern)
+
         if self.group_by is not None:
             res += '\nGROUP BY ' + ' '.join([
                 f'({x[0]} AS {x[1]})'

@@ -32,14 +32,16 @@ tokens = [
     'KW_A',
 ] + list(SPARQL_KEYWORDS_CASE_INSENSITIVE)
 
-# https://stackoverflow.com/questions/34712838/which-special-characters-must-be-escaped-when-using-python-regex-module-re
-# https://stackoverflow.com/questions/399078/what-special-characters-must-be-escaped-in-regular-expressions
 
 ############################################################
 #
 #  Terminals (tokens)
 #
 ############################################################
+
+# https://stackoverflow.com/questions/34712838/which-special-characters-must-be-escaped-when-using-python-regex-module-re
+# https://stackoverflow.com/questions/399078/what-special-characters-must-be-escaped-in-regular-expressions
+
 t_LPAREN = r'[(]'
 t_RPAREN = r'[)]'
 t_LBRACKET = r'[\[]'
@@ -75,11 +77,13 @@ t_QMARK = r'[?]'
 t_ignore = ' \t\r\f'
 t_ignore_COMMENT = r'\#.*'
 
+
 ############################################################
 #
 #  Terminals (internal patterns)
 #
 ############################################################
+
 PAT_EXPONENT = r'[eE][+\-]?[0-9]+'
 '''
 [155] EXPONENT ::= [eE] [+-]? [0-9]+
@@ -157,11 +161,13 @@ PAT_PN_LOCAL = (
     ((PN_CHARS | '.' | ':' | PLX)* (PN_CHARS | ':' | PLX) )?
 '''
 
+
 ############################################################
 #
 #  Terminals (for lexer)
 #
 ############################################################
+
 PAT_IRIREF = r'<([^<>\"{}|\^`\\\x00-\x20])*>'
 '''
 [139] IRIREF ::= '<' ([^<>"{}|^`\]-[#x00-#x20])* '>'
@@ -258,6 +264,7 @@ PAT_ANON = t_LBRACKET + r'(' + PAT_WS + r')*' + t_RBRACKET
 '''
 [163] ANON ::= '[' WS* ']'
 '''
+
 
 ############################################################
 '''
