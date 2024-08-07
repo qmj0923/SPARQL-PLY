@@ -146,14 +146,11 @@ class NodeTerm(QueryComponent):
     def __eq__(self, other):
         return (
             isinstance(other, NodeTerm)
-            and self.value == other.value
-            and self.type == other.type
-            and self.language == self.language
-            and self.datatype == self.datatype
+            and self.to_str() == other.to_str()
         )
 
     def __hash__(self):
-        return hash(self.value) ^ hash(self.type)
+        return hash(self.to_str())
 
 
 #########################################################

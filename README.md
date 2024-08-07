@@ -4,7 +4,7 @@ A SPARQL 1.1 query parser implemented with the [PLY](https://github.com/dabeaz/p
 
 ## Data Structure
 
-This parser defines several data structures, referred to as query components, to represent the syntax of SPARQL queries. Here are some figures to illustrate them. See the source code in `sparql_ply/components.py` for more details.
+This parser defines several data structures, referred to as query components, to represent the structure of a SPARQL query. Here are some figures to illustrate them. See the source code in `sparql_ply/components.py` for more details.
 
 ### Query
 
@@ -84,8 +84,7 @@ _:b0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> ?q
 
 ### Query Component Serialization
 
-Convert a query component to and from a dictionary for JSON serialization and deserialization.
-
+Convert a query component to a dictionary for JSON serialization, and vice versa for deserialization.
 
 ```pycon
 >>> from sparql_ply import parse_sparql
