@@ -51,12 +51,13 @@ class ReplacerNode:
         This method replaces nodes in the replacer tree based on the provided
         handler dictionary, which maps each key to a handler. A handler can be
         one of the following:
-        - A string: This will be used to construct a leaf node and replace
-            nodes with the same key.
-        - A ReplacerNode: A copy of the ReplacerNode will be used to replace
-            nodes with the same key.
-        - A callable: The callable will be called with the node as an argument
-            and should return a ReplacerNode.
+        - A string: For each node whose `key` matches the dictionary key, a
+            new leaf node with this string will replace the node.
+        - A ReplacerNode: For each node whose `key` matches the dictionary
+            key, a copy of this `ReplacerNode` will replace the node.
+        - A callable: For each node whose `key` matches the dictionary key,
+            this function will be called with the node as an argument, and it
+            should return a `ReplacerNode` that will replace the node.
 
         Parameters
         ----------
@@ -102,7 +103,7 @@ class ReplacerNode:
 
     def compact(self) -> ReplacerNode:
         '''
-        Compact the replacer tree by merging any node whose key is None with
+        Compact the replacer tree by merging any node whose `key` is None with
         its parent node.
         '''
         def handle_node(node: ReplacerNode) -> ReplacerNode:
@@ -259,7 +260,8 @@ class ReplacerFactory:
                 for key, span_list in key2spans.items()
                 for start, stop in span_list
             ],
-            key=lambda x: (x[2], -x[1], -rank_key(x[0])),
+            key=lambda x: (-x[2], x[1], rank_key(x[0])),
+            reverse=True,
         )
         mono_stack = list()
         for key, start, stop in node_list:
@@ -321,9 +323,9 @@ if __name__ == '__main__':
 
     '''
     Example 2:
-    Suppose that the pseduo function call `foo(a, b)` will return a string
+    Suppose that the pseduo function call `foo(a, b)` will return a pair
     `<a,b>`, and we have variable x = "xxx" and z = "zzz". Now we want to get
-    the result of `foo(x, foo("yyy", z))`, which is `<"xxx", <"yyy", "zzz">>`.
+    the result of `foo(x, foo("yyy", z))`, which is `<"xxx",<"yyy","zzz">>`.
     '''
     content = 'foo(x, foo("yyy", z))'
     key2spans = {
