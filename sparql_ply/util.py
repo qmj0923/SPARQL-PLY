@@ -14,7 +14,6 @@ sys.path.append(os.path.dirname(SCRIPT_DIR))
 from collections import defaultdict
 from collections.abc import Sequence
 from copy import deepcopy
-from functools import singledispatch
 from typing import (
     List, Tuple, Set, Dict, Callable, Any, Optional, Union, Type,
 )
@@ -607,259 +606,347 @@ def expand_syntax_form(
 #
 #########################################################
 
-@singledispatch
-def serialize(component: QueryComponent) -> Dict[str, Any]:
+def serialize(
+    component: QueryComponent, include_raw_info: bool = False,
+) -> Dict[str, Any]:
     '''
     Convert a query component to a JSON-serializable dictionary.
     
-    Note: Fields related to raw SPARQL text (e.g. `lexstart`, `lexstop`) are
-    not included.
+    Fields related to raw SPARQL text (e.g. `lexstart`, `lexstop`) are
+    included only if `include_raw_info` is True.
     '''
-    raise NotImplementedError(
-        f'[{serialize.__name__}] Unsupported type: {type(component)}.'
-    )
 
+    def post_process(
+        component: QueryComponent, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        if include_raw_info:
+            return {
+                'lexstart': component.lexstart,
+                'lexstop': component.lexstop,
+                **data,
+            }
+        return data
 
-@serialize.register(NodeTerm)
-def _(component: NodeTerm) -> Dict[str, Any]:
-    if component.datatype is not None: 
-        datatype = serialize(component.datatype)
-    else:
-        datatype = None
+    def handle_node_term(component: NodeTerm) -> Dict[str, Any]:
+        data = {
+            'type': get_name_from_type(component.type),
+            'value': component.value,
+        }
+        if component.language is not None:
+            data['language'] = component.language
+        if component.datatype is not None:
+            data['datatype'] = dfs(component.datatype)
+        return post_process(component, data)
+    
+    def handle_property_path(component: PropertyPath) -> Dict[str, Any]:
+        data = {
+            'type': get_name_from_type(component.type),
+            'operator': component.operator,
+            'children': [dfs(x) for x in component.children],
+        }
+        return post_process(component, data)
+    
+    def handle_collection_path(component: CollectionPath) -> Dict[str, Any]:
+        data = {
+            'type': get_name_from_type(component.type),
+            'children': [dfs(x) for x in component.children],
+        }
+        return post_process(component, data)
 
-    return {
-        'type': get_name_from_type(component.type),
-        'value': component.value,
-        'language': component.language,
-        'datatype': datatype,
-    }
-
-
-@serialize.register(PropertyPath)
-def _(component: PropertyPath) -> Dict[str, Any]:
-    return {
-        'type': get_name_from_type(component.type),
-        'operator': component.operator,
-        'children': [serialize(x) for x in component.children],
-    }
-
-
-@serialize.register(CollectionPath)
-def _(component: CollectionPath) -> Dict[str, Any]:
-    return {
-        'type': get_name_from_type(component.type),
-        'children': [serialize(x) for x in component.children],
-    }
-
-
-@serialize.register(BlankNodePath)
-def _(component: BlankNodePath) -> Dict[str, Any]:
-    pred_obj_list = [
-        [serialize(p), [serialize(o) for o in ol]] 
-        for p, ol in component.pred_obj_list
-    ]
-    return {
-        'type': get_name_from_type(component.type),
-        'pred_obj_list': pred_obj_list,
-    }
-
-
-@serialize.register(TriplesPath)
-def _(component: TriplesPath) -> Dict[str, Any]:
-    if component.pred_obj_list is not None:
+    def handle_blank_node_path(component: BlankNodePath) -> Dict[str, Any]:
         pred_obj_list = [
-            [serialize(p), [serialize(o) for o in ol]] 
+            [dfs(p), [dfs(o) for o in ol]] 
             for p, ol in component.pred_obj_list
         ]
-    else:
-        pred_obj_list = None
+        data = {
+            'type': get_name_from_type(component.type),
+            'pred_obj_list': pred_obj_list,
+        }
+        return post_process(component, data)
 
-    return {
-        'type': get_name_from_type(component.type),
-        'subj': serialize(component.subj),
-        'pred_obj_list': pred_obj_list,
-    }
+    def handle_triples_path(component: TriplesPath) -> Dict[str, Any]:
+        if component.pred_obj_list is not None:
+            pred_obj_list = [
+                [dfs(p), [dfs(o) for o in ol]] 
+                for p, ol in component.pred_obj_list
+            ]
+        else:
+            pred_obj_list = None
 
+        data = {
+            'type': get_name_from_type(component.type),
+            'subj': dfs(component.subj),
+            'pred_obj_list': pred_obj_list,
+        }
+        return post_process(component, data)
 
-@serialize.register(Expression)
-def _(component: Expression) -> Dict[str, Any]:
-    return {
-        'type': get_name_from_type(component.type),
-        'operator': component.operator,
-        'is_distinct': component.is_distinct,
-        'children': [serialize(x) for x in component.children],
-    }
+    def handle_expression(component: Expression) -> Dict[str, Any]:
+        data = {
+            'type': get_name_from_type(component.type),
+            'operator': component.operator,
+            'is_distinct': component.is_distinct,
+            'children': [dfs(x) for x in component.children],
+        }
+        return post_process(component, data)
 
+    def handle_graph_pattern(component: GraphPattern) -> Dict[str, Any]:
+        if component.type & GraphPattern.INLINE_DATA:
+            children = [
+                [dfs(x) for x in row]
+                for row in component.children
+            ]
+        else:
+            children = [dfs(x) for x in component.children]
 
-@serialize.register(GraphPattern)
-def _(component: GraphPattern) -> Dict[str, Any]:
-    if component.type & GraphPattern.INLINE_DATA:
-        children = [
-            [serialize(x) for x in row]
-            for row in component.children
-        ]
-    else:
-        children = [serialize(x) for x in component.children]
+        data = {
+            'type': get_name_from_type(component.type),
+            'is_silent': component.is_silent,
+            'children': children,
+        }
+        return post_process(component, data)
 
-    return {
-        'type': get_name_from_type(component.type),
-        'is_silent': component.is_silent,
-        'children': children,
-    }
+    def handle_query(component: Query) -> Dict[str, Any]:       
+        data = dict()
+        data['type'] = get_name_from_type(component.type)
 
+        if component.prologue is not None:
+            data['prologue'] = [
+                [str(row[0])] + [dfs(x) for x in row[1:]]
+                for row in component.prologue
+            ]
+        if component.select_modifier is not None:
+            data['select_modifier'] = str(component.select_modifier)
+        if component.target is not None:
+            if isinstance(component.target, (NodeTerm, GraphPattern)):
+                target = dfs(component.target)
+            elif isinstance(component.target, Sequence):
+                target = list()
+                for t in component.target:
+                    if isinstance(t, NodeTerm):
+                        target.append(dfs(t))
+                    elif isinstance(t, ComponentWrapper):
+                        target.append([dfs(t[0]), dfs(t[1])])
+                    else:
+                        raise NotImplementedError
+            else:
+                raise NotImplementedError
+            data['target'] = target
+        if component.dataset is not None:
+            data['dataset'] = [
+                [str(x) for x in d[:-1]] + [dfs(d[-1])]
+                for d in component.dataset
+            ]
+        if component.pattern is not None:
+            data['pattern'] = dfs(component.pattern)
 
-@serialize.register(Query)
-def _(component: Query) -> Dict[str, Any]:
-    prologue        = None
-    select_modifier = None
-    target          = None
-    dataset         = None
-    pattern         = None
-    group_by        = None
-    having          = None
-    order_by        = None
-    limit           = None
-    offset          = None
-    values          = None
-    
-    if component.prologue is not None:
-        prologue = [
-            [str(row[0])] + [serialize(x) for x in row[1:]]
-            for row in component.prologue
-        ]
-    if component.select_modifier is not None:
-        select_modifier = str(component.select_modifier)
-    if component.target is not None:
-        if isinstance(component.target, (NodeTerm, GraphPattern)):
-            target = serialize(component.target)
-        elif isinstance(component.target, Sequence):
-            target = list()
-            for t in component.target:
-                if isinstance(t, NodeTerm):
-                    target.append(serialize(t))
-                elif isinstance(t, ComponentWrapper):
-                    target.append([serialize(t[0]), serialize(t[1])])
+        if component.group_by is not None:
+            group_by = list()
+            for x in component.group_by:
+                if isinstance(x, (NodeTerm, Expression)):
+                    group_by.append(dfs(x))
+                elif isinstance(x, ComponentWrapper):
+                    group_by.append([dfs(x[0]), dfs(x[1])])
                 else:
                     raise NotImplementedError
+            data['group_by'] = group_by
+        if component.having is not None:
+            data['having'] = [dfs(x) for x in component.having]
+        if component.order_by is not None:
+            order_by = list()
+            for x in component.order_by:
+                if isinstance(x, (NodeTerm, Expression)):
+                    order_by.append(dfs(x))
+                elif isinstance(x, ComponentWrapper):
+                    order_by.append([str(x[0]), dfs(x[1])])
+                else:
+                    raise NotImplementedError
+            data['order_by'] = order_by
+        if component.limit is not None:
+            data['limit'] = dfs(component.limit.value)
+        if component.offset is not None:
+            data['offset'] = dfs(component.offset.value)
+        if component.values is not None:
+            data['values'] = [
+                [dfs(x) for x in row] for row in component.values
+            ]
+
+        if include_raw_info:
+            span_dict = dict()
+            if component.prologue is not None:
+                span_dict['prologue'] = [
+                    [x.lexstart, x.lexstop] for x in component.prologue
+                ]
+            if component.select_modifier is not None:
+                span_dict['select_modifier'] = [
+                    component.select_modifier.lexstart,
+                    component.select_modifier.lexstop,
+                ]
+            if component.target is not None:
+                if isinstance(component.target, Sequence):
+                    span_dict['target'] = [
+                        [t.lexstart, t.lexstop] for t in component.target
+                        if isinstance(t, ComponentWrapper)
+                    ]
+            if component.dataset is not None:
+                span_dict['dataset'] = [
+                    [x.lexstart, x.lexstop] for x in component.dataset
+                ]
+            if component.group_by is not None:
+                span_dict['group_by'] = [
+                    [component.group_by.lexstart, component.group_by.lexstop]
+                ] + [
+                    [x.lexstart, x.lexstop] for x in component.group_by
+                    if isinstance(x, ComponentWrapper)
+                ]
+            if component.having is not None:
+                span_dict['having'] = [
+                    component.having.lexstart, component.having.lexstop
+                ]
+            if component.order_by is not None:
+                span_dict['order_by'] = [
+                    [component.order_by.lexstart, component.order_by.lexstop]
+                ] + [
+                    [x.lexstart, x.lexstop] for x in component.order_by
+                    if isinstance(x, ComponentWrapper)
+                ]
+            if component.limit is not None:
+                span_dict['limit'] = [
+                    component.limit.lexstart, component.limit.lexstop
+                ]
+            if component.offset is not None:
+                span_dict['offset'] = [
+                    component.offset.lexstart, component.offset.lexstop
+                ]
+            if component.values is not None:
+                span_dict['values'] = [
+                    component.values.lexstart, component.values.lexstop
+                ]
+            data['wrapper_span'] = span_dict
+
+        return post_process(component, data)
+
+    def dfs(component: QueryComponent) -> Dict[str, Any]:
+        typ = component.type
+        if typ & NodeTerm.TYPE:
+            return handle_node_term(component)
+        elif typ & PropertyPath.TYPE:
+            return handle_property_path(component)
+        elif typ & CollectionPath.TYPE:
+            return handle_collection_path(component)
+        elif typ & BlankNodePath.TYPE:
+            return handle_blank_node_path(component)
+        elif typ & TriplesPath.TYPE:
+            return handle_triples_path(component)
+        elif typ & Expression.TYPE:
+            return handle_expression(component)
+        elif typ & GraphPattern.TYPE:
+            return handle_graph_pattern(component)
+        elif typ & Query.TYPE:
+            return handle_query(component)
         else:
-            raise NotImplementedError
-    if component.dataset is not None:
-        dataset = [
-            [str(x) for x in row[:-1]] + [serialize(row[-1])]
-            for row in component.dataset
-        ]
-    if component.pattern is not None:
-        pattern = serialize(component.pattern)
-
-    if component.group_by is not None:
-        group_by = list()
-        for x in component.group_by:
-            if isinstance(x, (NodeTerm, Expression)):
-                group_by.append(serialize(x))
-            elif isinstance(x, ComponentWrapper):
-                group_by.append([serialize(x[0]), serialize(x[1])])
-            else:
-                raise NotImplementedError
-    if component.having is not None:
-        having = [serialize(x) for x in component.having]
-    if component.order_by is not None:
-        order_by = list()
-        for x in component.order_by:
-            if isinstance(x, (NodeTerm, Expression)):
-                order_by.append(serialize(x))
-            elif isinstance(x, ComponentWrapper):
-                order_by.append([str(x[0]), serialize(x[1])])
-            else:
-                raise NotImplementedError
-    if component.limit is not None:
-        limit = serialize(component.limit.value)
-    if component.offset is not None:
-        offset = serialize(component.offset.value)
-    if component.values is not None:
-        values = [[serialize(x) for x in row] for row in component.values]
-
-    return {
-        'type': get_name_from_type(component.type),
-        'prologue': prologue,
-        'select_modifier': select_modifier,
-        'target': target,
-        'dataset': dataset,
-        'pattern': pattern,
-        'group_by': group_by,
-        'having': having,
-        'order_by': order_by,
-        'limit': limit,
-        'offset': offset,
-        'values': values,
-    }
+            raise NotImplementedError(
+                f'[serialize] Unsupported type: {typ}.'
+            )
+    
+    if include_raw_info:
+        if (
+            (not isinstance(component, Query))
+            or component.type & Query.SUB_SELECT
+        ):
+            raise ValueError(
+                'Raw information is not available for '
+                f'{get_name_from_type(component.type)}.'
+            )
+    
+    data = dfs(component)
+    if include_raw_info:
+        data['raw_sparql'] = component.raw_sparql
+    return data
 
 
-def deserialize(data: Dict[str, Any]) -> QueryComponent:
+def deserialize(
+    data: Dict[str, Any],
+    include_raw_info: bool = False,
+) -> QueryComponent:
     '''
     Convert a JSON-serializable dictionary to a query component.
     
-    Note: Fields related to raw SPARQL text (e.g. `lexstart`, `lexstop`) are
-    unavailable in the output.
+    Fields related to raw SPARQL text (e.g. `lexstart`, `lexstop`) are
+    available in the output component only if `include_raw_info` is True.
     '''
     
+    def get_lex_span(data: Dict[str, Any]) -> Tuple[int, int]:
+        if include_raw_info:
+            return data['lexstart'], data['lexstop']
+        return -1, -1
+    
     def to_node_term(data: Dict[str, Any]) -> NodeTerm:
+        lexstart, lexstop = get_lex_span(data)
         typ = get_type_from_name(data['type'])
-        if data['datatype'] is not None:
-            datatype = deserialize(data['datatype'])
+        language = data.get('language', None)
+        if 'datatype' in data:
+            datatype = dfs(data['datatype'])
         else:
             datatype = None
 
         return NodeTerm(
-            -1, -1, data['value'], typ, data['language'], datatype,
+            lexstart, lexstop, data['value'],
+            typ, language, datatype,
         )
     
     def to_property_path(data: Dict[str, Any]) -> PropertyPath:
+        lexstart, lexstop = get_lex_span(data)
         return PropertyPath(
-            -1, -1, [deserialize(x) for x in data['children']],
+            lexstart, lexstop, [dfs(x) for x in data['children']],
             data['operator'],
         )
     
     def to_collection_path(data: Dict[str, Any]) -> CollectionPath:
+        lexstart, lexstop = get_lex_span(data)
         return CollectionPath(
-            -1, -1, [deserialize(x) for x in data['children']],
+            lexstart, lexstop, [dfs(x) for x in data['children']],
         )
 
     def to_blank_node_path(data: Dict[str, Any]) -> BlankNodePath:
+        lexstart, lexstop = get_lex_span(data)
         pred_obj_list = [
-            [deserialize(p), [deserialize(o) for o in ol]]
+            [dfs(p), [dfs(o) for o in ol]]
             for p, ol in data['pred_obj_list']
         ]
-        return BlankNodePath(-1, -1, pred_obj_list)
+        return BlankNodePath(lexstart, lexstop, pred_obj_list)
 
     def to_triples_path(data: Dict[str, Any]) -> TriplesPath:
-        subj = deserialize(data['subj'])
+        lexstart, lexstop = get_lex_span(data)
+        subj = dfs(data['subj'])
         if data['pred_obj_list'] is not None:
             pred_obj_list = [
-                [deserialize(p), [deserialize(o) for o in ol]]
+                [dfs(p), [dfs(o) for o in ol]]
                 for p, ol in data['pred_obj_list']
             ]
         else:
             pred_obj_list = None
 
-        return TriplesPath(-1, -1, subj, pred_obj_list)
+        return TriplesPath(lexstart, lexstop, subj, pred_obj_list)
 
     def to_expression(data: Dict[str, Any]) -> Expression:
+        lexstart, lexstop = get_lex_span(data)
         return Expression(
-            -1, -1, [deserialize(x) for x in data['children']],
+            lexstart, lexstop, [dfs(x) for x in data['children']],
             data['operator'], data['is_distinct'],
         )
 
     def to_graph_pattern(data: Dict[str, Any]) -> GraphPattern:
+        lexstart, lexstop = get_lex_span(data)
         typ = get_type_from_name(data['type'])
         if typ & GraphPattern.INLINE_DATA:
             children = [
-                [deserialize(x) for x in row] for row in data['children']
+                [dfs(x) for x in row] for row in data['children']
             ]
         else:
-            children = [deserialize(x) for x in data['children']]
+            children = [dfs(x) for x in data['children']]
 
         return GraphPattern(
-            -1, -1, children, typ, data['is_silent'],
+            lexstart, lexstop, children, typ, data['is_silent'],
         )
 
     def to_query(data: Dict[str, Any]) -> Query:
@@ -874,78 +961,118 @@ def deserialize(data: Dict[str, Any]) -> QueryComponent:
         limit           = None
         offset          = None
         values          = None
-        
-        if data['prologue'] is not None:
+
+        if 'prologue' in data:
             prologue = list()
             for row in data['prologue']:
-                decl = [str(row[0])] + [deserialize(x) for x in row[1:]]
+                decl = [str(row[0])] + [dfs(x) for x in row[1:]]
                 prologue.append(ComponentWrapper(-1, -1, decl))
-        if data['select_modifier'] is not None:
+        if 'select_modifier' in data:
             select_modifier = ComponentWrapper(
                 -1, -1, data['select_modifier'],
             )
-        if data['target'] is not None:
+        if 'target' in data:
             if isinstance(data['target'], dict):
-                target = deserialize(data['target'])
+                target = dfs(data['target'])
             elif isinstance(data['target'], list):
                 target = list()
                 for t in data['target']:
                     if isinstance(t, dict):
-                        target.append(deserialize(t))
+                        target.append(dfs(t))
                     elif isinstance(t, list):
                         target.append(ComponentWrapper(
-                            -1, -1, [deserialize(t[0]), deserialize(t[1])]
+                            -1, -1, [dfs(t[0]), dfs(t[1])]
                         ))
                     else:
                         raise NotImplementedError
             else:
                 raise NotImplementedError
-        if data['dataset'] is not None:
+        if 'dataset' in data:
             dataset = list()
             for row in data['dataset']:
-                decl = [str(x) for x in row[:-1]] + [deserialize(row[-1])]
+                decl = [str(x) for x in row[:-1]] + [dfs(row[-1])]
                 dataset.append(ComponentWrapper(-1, -1, decl))
-        if data['pattern'] is not None:
-            pattern = deserialize(data['pattern'])
-        if data['group_by'] is not None:
+        if 'pattern' in data:
+            pattern = dfs(data['pattern'])
+        if 'group_by' in data:
             conditions = list()
             for x in data['group_by']:
                 if isinstance(x, dict):
-                    conditions.append(deserialize(x))
+                    conditions.append(dfs(x))
                 elif isinstance(x, list):
                     conditions.append(ComponentWrapper(
-                        -1, -1, [deserialize(x[0]), deserialize(x[1])]
+                        -1, -1, [dfs(x[0]), dfs(x[1])]
                     ))
                 else:
                     raise NotImplementedError
             group_by = ComponentWrapper(-1, -1, conditions)
-        if data['having'] is not None:
-            conditions = [deserialize(x) for x in data['having']]
+        if 'having' in data:
+            conditions = [dfs(x) for x in data['having']]
             having = ComponentWrapper(-1, -1, conditions)
-        if data['order_by'] is not None:
+        if 'order_by' in data:
             conditions = list()
             for x in data['order_by']:
                 if isinstance(x, dict):
-                    conditions.append(deserialize(x))
+                    conditions.append(dfs(x))
                 elif isinstance(x, list):
                     conditions.append(ComponentWrapper(
-                        -1, -1, [str(x[0]), deserialize(x[1])]
+                        -1, -1, [str(x[0]), dfs(x[1])]
                     ))
                 else:
                     raise NotImplementedError
             order_by = ComponentWrapper(-1, -1, conditions)
-        if data['limit'] is not None:
-            limit = ComponentWrapper(-1, -1, deserialize(data['limit']))
-        if data['offset'] is not None:
-            offset = ComponentWrapper(-1, -1, deserialize(data['offset']))
-        if data['values'] is not None:
+        if 'limit' in data:
+            limit = ComponentWrapper(-1, -1, dfs(data['limit']))
+        if 'offset' in data:
+            offset = ComponentWrapper(-1, -1, dfs(data['offset']))
+        if 'values' in data:
             data_block = [
-                [deserialize(x) for x in row] for row in data['values']
+                [dfs(x) for x in row] for row in data['values']
             ]
             values = ComponentWrapper(-1, -1, data_block)
 
+        if include_raw_info:
+            span_dict = data['wrapper_span']
+            if prologue is not None:
+                for i, row in enumerate(prologue):
+                    row.lexstart, row.lexstop = span_dict['prologue'][i]
+            if select_modifier is not None:
+                select_modifier.lexstart, select_modifier.lexstop = (
+                    span_dict['select_modifier']
+                )
+            if target is not None:
+                if isinstance(target, Sequence):
+                    spans = span_dict['target'].reverse()
+                    for t in target:
+                        if isinstance(t, ComponentWrapper):
+                            t.lexstart, t.lexstop = spans.pop()
+            if dataset is not None:
+                for i, d in enumerate(dataset):
+                    d.lexstart, d.lexstop = span_dict['dataset'][i]
+            if group_by is not None:
+                group_by.lexstart, group_by.lexstop = span_dict['group_by'][0]
+                spans = span_dict['group_by'][1:].reverse()
+                for i, x in enumerate(group_by):
+                    if isinstance(x, ComponentWrapper):
+                        x.lexstart, x.lexstop = spans.pop()
+            if having is not None:
+                having.lexstart, having.lexstop = span_dict['having']
+            if order_by is not None:
+                order_by.lexstart, order_by.lexstop = span_dict['order_by'][0]
+                spans = span_dict['order_by'][1:].reverse()
+                for i, x in enumerate(order_by):
+                    if isinstance(x, ComponentWrapper):
+                        x.lexstart, x.lexstop = spans.pop()
+            if limit is not None:
+                limit.lexstart, limit.lexstop = span_dict['limit']
+            if offset is not None:
+                offset.lexstart, offset.lexstop = span_dict['offset']
+            if values is not None:
+                values.lexstart, values.lexstop = span_dict['values']
+
+        lexstart, lexstop = get_lex_span(data)
         return Query(
-            -1, -1, get_type_from_name(data['type']),
+            lexstart, lexstop, get_type_from_name(data['type']),
             prologue=prologue,
             select_modifier=select_modifier,
             target=target,
@@ -959,27 +1086,43 @@ def deserialize(data: Dict[str, Any]) -> QueryComponent:
             values=values,
         )
 
+    def dfs(data: Dict[str, Any]) -> QueryComponent:
+        typ = get_type_from_name(data['type'])
+        if typ & NodeTerm.TYPE:
+            return to_node_term(data)
+        elif typ & PropertyPath.TYPE:
+            return to_property_path(data)
+        elif typ & CollectionPath.TYPE:
+            return to_collection_path(data)
+        elif typ & BlankNodePath.TYPE:
+            return to_blank_node_path(data)
+        elif typ & TriplesPath.TYPE:
+            return to_triples_path(data)
+        elif typ & Expression.TYPE:
+            return to_expression(data)
+        elif typ & GraphPattern.TYPE:
+            return to_graph_pattern(data)
+        elif typ & Query.TYPE:
+            return to_query(data)
+        else:
+            raise NotImplementedError(
+                f'[deserialize] Unsupported type: {typ}.'
+            )
+
     typ = get_type_from_name(data['type'])
-    if typ & NodeTerm.TYPE:
-        return to_node_term(data)
-    elif typ & PropertyPath.TYPE:
-        return to_property_path(data)
-    elif typ & CollectionPath.TYPE:
-        return to_collection_path(data)
-    elif typ & BlankNodePath.TYPE:
-        return to_blank_node_path(data)
-    elif typ & TriplesPath.TYPE:
-        return to_triples_path(data)
-    elif typ & Expression.TYPE:
-        return to_expression(data)
-    elif typ & GraphPattern.TYPE:
-        return to_graph_pattern(data)
-    elif typ & Query.TYPE:
-        return to_query(data)
-    else:
-        raise NotImplementedError(
-            f'[{deserialize.__name__}] Unsupported type: {typ}.'
-        )
+    if include_raw_info:
+        if (not typ & Query.TYPE) or typ & Query.SUB_SELECT:
+            raise ValueError(
+                'Raw information is not available for '
+                f'{get_name_from_type(typ)}.'
+            )
+        if 'raw_sparql' not in data:
+            raise ValueError('Raw information is not found.')
+
+    component = dfs(data)
+    if include_raw_info:
+        component.raw_sparql = data['raw_sparql']
+    return component
 
 
 #########################################################
@@ -1090,11 +1233,14 @@ if __name__ == '__main__':
         # expand_blank_node=False,
         # expand_pred_obj_list=False,
     ))
-
+    
+    # sparql = 'SELECT * WHERE { BIND (42 AS ?s) }'
     # q1 = parse_sparql(sparql)
-    # data = serialize(q1)
-    # q2 = deserialize(data)
+    # d1 = serialize(q1)
+    # q2 = deserialize(d1)
+    # d2 = serialize(q2)
     # assert q1.to_str() == q2.to_str()
+    # assert d1 == d2
     # import json
-    # print(json.dumps(data, indent=2))
+    # print(json.dumps(d2, indent=2))
 

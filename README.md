@@ -98,16 +98,11 @@ True
 >>> import json
 >>> print(json.dumps(data, indent=2))
 {
-  "type": "Query.SELECT",
-  "prologue": null,      
-  "select_modifier": null,
+  "type": "Query.SELECT",        
   "target": {
-    "type": "NodeTerm.SPECIAL",
-    "value": "*",
-    "language": null,
-    "datatype": null
+    "type": "NodeTerm.SPECIAL",  
+    "value": "*"
   },
-  "dataset": null,
   "pattern": {
     "type": "GraphPattern.GROUP",
     "is_silent": false,
@@ -118,26 +113,16 @@ True
         "children": [
           {
             "type": "NodeTerm.INTEGER",
-            "value": "42",
-            "language": null,
-            "datatype": null
+            "value": "42"
           },
           {
             "type": "NodeTerm.VAR",
-            "value": "?s",
-            "language": null,
-            "datatype": null
+            "value": "?s"
           }
         ]
       }
     ]
-  },
-  "group_by": null,
-  "having": null,
-  "order_by": null,
-  "limit": null,
-  "offset": null,
-  "values": null
+  }
 }
 ```
 
