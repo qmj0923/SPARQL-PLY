@@ -8,27 +8,27 @@ This parser defines several data structures, referred to as query components, to
 
 ### Query
 
-![Query](doc/figure/query.png)
+![query](doc/figure/query.png)
 
 ### GraphPattern
 
-![GraphPattern](doc/figure/graph_pattern.png)
+![graph_pattern](doc/figure/graph_pattern.png)
 
 ### NodeTerm
 
-![NodeTerm](doc/figure/node_term.png)
+![node_term](doc/figure/node_term.png)
 
 ### PropertyPath
 
-![PropertyPath](doc/figure/property_path.png)
+![property_path](doc/figure/property_path.png)
 
 ### CollectionPath & BlankNodePath & TriplesPath
 
-![TriplesPath](doc/figure/triples_path.png)
+![triples_path](doc/figure/triples_path.png)
 
 ### Expression
 
-![Expression](doc/figure/expression.png)
+![expression](doc/figure/expression.png)
 
 ## Usage
 
