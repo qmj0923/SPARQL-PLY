@@ -2756,11 +2756,14 @@ def p_property_list_1(p):
 pass
 
 
-def parse(sparql, debug=False, start='query_unit'):
+def parse(sparql, start='query_unit', debug=False):
     lexer = lex.lex(module=sparql_lex, debug=debug)
     parser = yacc.yacc(start=start, debug=debug)
+    tmp_debug = QueryComponent.DEBUG
     QueryComponent.DEBUG = debug
-    return parser.parse(sparql, lexer=lexer)
+    result = parser.parse(sparql, lexer=lexer)
+    QueryComponent.DEBUG = tmp_debug
+    return result
 
 
 if __name__ == '__main__':   
