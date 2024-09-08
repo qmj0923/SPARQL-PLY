@@ -105,11 +105,9 @@ True
   },
   "pattern": {
     "type": "GraphPattern.GROUP",
-    "is_silent": false,
     "children": [
       {
         "type": "GraphPattern.BIND",
-        "is_silent": false,
         "children": [
           {
             "type": "NodeTerm.INTEGER",
@@ -126,3 +124,12 @@ True
 }
 ```
 
+Note that the following fields are omitted in the serialization if they are None.
+
+- All fields in `Query`
+- `NodeTerm.language` and `NodeTerm.datatype`
+
+The following boolean fields are omitted in the serialization if they are False.
+
+- `GraphPattern.is_silent`
+- `Expression.is_distinct`

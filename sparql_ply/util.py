@@ -667,7 +667,7 @@ def serialize(
     def handle_triples_path(component: TriplesPath) -> Dict[str, Any]:
         if component.pred_obj_list is not None:
             pred_obj_list = [
-                [dfs(p), [dfs(o) for o in ol]] 
+                [dfs(p), [dfs(o) for o in ol]]
                 for p, ol in component.pred_obj_list
             ]
         else:
@@ -684,25 +684,24 @@ def serialize(
         data = {
             'type': get_name_from_type(component.type),
             'operator': component.operator,
-            'is_distinct': component.is_distinct,
             'children': [dfs(x) for x in component.children],
         }
+        if component.is_distinct:
+            data['is_distinct'] = True
         return post_process(component, data)
 
     def handle_graph_pattern(component: GraphPattern) -> Dict[str, Any]:
         if component.type & GraphPattern.INLINE_DATA:
-            children = [
-                [dfs(x) for x in row]
-                for row in component.children
-            ]
+            children = [[dfs(x) for x in row] for row in component.children]
         else:
             children = [dfs(x) for x in component.children]
 
         data = {
             'type': get_name_from_type(component.type),
-            'is_silent': component.is_silent,
             'children': children,
         }
+        if component.is_silent:
+            data['is_silent'] = True
         return post_process(component, data)
 
     def handle_query(component: Query) -> Dict[str, Any]:       
@@ -932,22 +931,19 @@ def deserialize(
         lexstart, lexstop = get_lex_span(data)
         return Expression(
             lexstart, lexstop, [dfs(x) for x in data['children']],
-            data['operator'], data['is_distinct'],
+            data['operator'], data.get('is_distinct', False),
         )
 
     def to_graph_pattern(data: Dict[str, Any]) -> GraphPattern:
         lexstart, lexstop = get_lex_span(data)
         typ = get_type_from_name(data['type'])
         if typ & GraphPattern.INLINE_DATA:
-            children = [
-                [dfs(x) for x in row] for row in data['children']
-            ]
+            children = [[dfs(x) for x in row] for row in data['children']]
         else:
             children = [dfs(x) for x in data['children']]
 
-        return GraphPattern(
-            lexstart, lexstop, children, typ, data['is_silent'],
-        )
+        is_silent = data.get('is_silent', False)
+        return GraphPattern(lexstart, lexstop, children, typ, is_silent)
 
     def to_query(data: Dict[str, Any]) -> Query:
         prologue        = None
