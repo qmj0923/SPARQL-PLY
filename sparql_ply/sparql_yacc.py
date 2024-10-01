@@ -2756,9 +2756,10 @@ def p_property_list_1(p):
 pass
 
 
-def parse(sparql, start='query_unit', debug=False):
-    lexer = lex.lex(module=sparql_lex, debug=debug)
-    parser = yacc.yacc(start=start, debug=debug)
+def parse(sparql, start='query_unit', debug=False, nowarn=True):
+    errorlog = yacc.NullLogger() if nowarn else yacc.PlyLogger(sys.stderr)
+    lexer = lex.lex(module=sparql_lex, debug=debug, errorlog=errorlog)
+    parser = yacc.yacc(start=start, debug=debug, errorlog=errorlog)
     tmp_debug = QueryComponent.DEBUG
     QueryComponent.DEBUG = debug
     result = parser.parse(sparql, lexer=lexer)
@@ -2770,6 +2771,6 @@ if __name__ == '__main__':
     data = 'PREFIX  rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\nPREFIX  wde:  <http://www.wikidata.org/entity/>\n\nSELECT  *\nWHERE\n  { _:b0  rdf:rest   ( wde:Q56061 ) }'
     start = 'query_unit'
 
-    # print(parse(data, debug=False))
-    print(parse(data, debug=True))
+    print(parse(data, debug=False))
+    # print(parse(data, debug=True))
 
