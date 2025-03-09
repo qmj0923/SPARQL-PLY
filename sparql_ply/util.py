@@ -1208,6 +1208,81 @@ def get_class_from_type(typ: int) -> Type[QueryComponent]:
     return cls
 
 
+#########################################################
+#
+#  Get Variable Scopes
+#
+#########################################################
+
+def get_variable_scopes(
+    component: QueryComponent
+) -> List[List[Tuple[int, int]]]:
+    '''
+    Get the variable scopes of a query component.
+
+    Parameters
+    ----------
+    component: QueryComponent
+
+    Returns
+    -------
+    A list of variable scopes. Each scope is a list of integer pairs
+    representing the lexical start and end positions of the variable 
+    occurrences. The integer pairs within each scope are sorted in
+    sequential order.
+    '''
+    stack_var2scope: List[
+        Dict[str, List[Tuple[int, int]]]
+    ] = [defaultdict(list)]
+    scopes: List[List[Tuple[int, int]]] = list()
+
+    def before(component: QueryComponent) -> None:
+        if (
+            isinstance(component, NodeTerm)
+            and component.type == NodeTerm.VAR
+        ):
+            stack_var2scope[-1][component.value].append(
+                [component.lexstart, component.lexstop]
+            )
+        elif (
+            isinstance(component, Query)
+            and component.type & Query.SUB_SELECT
+        ):
+            stack_var2scope.append(defaultdict(list))
+
+    def after(component: QueryComponent) -> None:
+        if not (
+            isinstance(component, Query)
+            and component.type & Query.SUB_SELECT
+        ):
+            return
+        
+        var2scope = stack_var2scope.pop()
+        if isinstance(component.target, NodeTerm):
+            # SELECT * WHERE { ... }
+            stack_var2scope[-1].update(var2scope)
+        elif isinstance(component.target, Sequence):
+            tar_vars = set()
+            for t in component.target:
+                if isinstance(t, NodeTerm):
+                    tar_vars.add(t.value)
+                elif isinstance(t, ComponentWrapper):
+                    tar_vars.add(t[1].value)
+                else:
+                    raise NotImplementedError
+            for v, scope in var2scope.items():
+                if v in tar_vars:
+                    stack_var2scope[-1][v].extend(scope)
+                else:
+                    scopes.append(scope)
+        else:
+            raise NotImplementedError
+
+    traverse(component, before, after)
+    scopes.extend(stack_var2scope[-1].values())
+    return [sorted(scope) for scope in scopes]
+
+
 if __name__ == '__main__':
     sparql = (
         'PREFIX  rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>\n'
@@ -1239,4 +1314,17 @@ if __name__ == '__main__':
     # assert d1 == d2
     # import json
     # print(json.dumps(d2, indent=2))
+
+    # sparql = (
+    #     'SELECT ?a ?b ?c ?d {'
+    #     '?a :p ?b. ?a :q ?c.'
+    #     '{ SELECT (?c AS ?d) { ?a :p :e. ?a :r ?c.} }'
+    #     '{ SELECT ?a { ?a :q ?c. { SELECT ?c { ?c :r :e.} } } }'
+    #     '}'
+    # )
+    # q = parse_sparql(sparql)
+    # for i in range(0, len(sparql), 25):
+    #     print(f'[{i:0{len(str(len(sparql)))}d}]', sparql[i:i + 25])
+    # for scope in get_variable_scopes(q):
+    #     print(sparql[scope[0][0]:scope[0][1]], scope)
 

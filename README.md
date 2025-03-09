@@ -133,3 +133,26 @@ The following boolean fields are omitted in the serialization if they are False.
 
 - `GraphPattern.is_silent`
 - `Expression.is_distinct`
+
+### Get Variable Scopes
+
+Get the scopes of variables in a SPARQL query.
+
+```pycon
+>>> from sparql_ply import parse_sparql
+>>> from sparql_ply.util import get_variable_scopes
+>>> subselect = '{ SELECT ?b { ?b :p1 ?a. ?a :p2 :q. } }'
+>>> sparql = 'SELECT ?a ?b { ?a :p :q. ' + subselect + ' }'
+>>> for i in range(0, len(sparql), 25):
+...     print(f'[{i:0{len(str(len(sparql)))}d}]', sparql[i:i + 25])
+...
+[00] SELECT ?a ?b { ?a :p :q. 
+[25] { SELECT ?b { ?b :p1 ?a. 
+[50] ?a :p2 :q. } } }
+>>> for scope in get_variable_scopes(parse_sparql(sparql)):
+...     print(sparql[scope[0][0]:scope[0][1]], scope)
+...
+?a [[46, 48], [50, 52]]
+?a [[7, 9], [15, 17]]
+?b [[10, 12], [34, 36], [39, 41]]
+```
