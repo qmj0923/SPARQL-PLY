@@ -1260,7 +1260,8 @@ def get_variable_scopes(
         var2scope = stack_var2scope.pop()
         if isinstance(component.target, NodeTerm):
             # SELECT * WHERE { ... }
-            stack_var2scope[-1].update(var2scope)
+            for v, scope in var2scope.items():
+                stack_var2scope[-1][v].extend(scope)
         elif isinstance(component.target, Sequence):
             tar_vars = set()
             for t in component.target:
@@ -1322,6 +1323,7 @@ if __name__ == '__main__':
     #     '{ SELECT ?a { ?a :q ?c. { SELECT ?c { ?c :r :e.} } } }'
     #     '}'
     # )
+    # sparql = "SELECT DISTINCT ?x0 {\n\t{\n\t\tSELECT DISTINCT * {\n\t\t\t<http://www.wikidata.org/entity/Q13882355> <http://www.wikidata.org/prop/direct/P156> ?x1.\n\t\t\t\n\t\t\t?x2 <http://www.wikidata.org/prop/direct/P361> ?x1.\n\t\t\t\n\t\t\t?x2 <http://www.wikidata.org/prop/P1831> ?x3.\n\t\t\t?x3 <http://www.wikidata.org/prop/statement/value/P1831> ?x4.\n\t\t\t?x4 <http://wikiba.se/ontology#quantityAmount> ?x5.\n\t\t}\n\t\tORDER BY DESC(?x5)\n\t\tLIMIT 1\n\t}\n\t{\n\t\tSELECT DISTINCT * {\n\t\t\t<http://www.wikidata.org/entity/Q13882355> <http://www.wikidata.org/prop/direct/P156> ?x1.\n\t\t\t\n\t\t\t?x6 <http://www.wikidata.org/prop/direct/P361> ?x1.\n\t\t\t\n\t\t\t?x6 <http://www.wikidata.org/prop/P1831> ?x7.\n\t\t\t?x7 <http://www.wikidata.org/prop/statement/value/P1831> ?x8.\n\t\t\t?x8 <http://wikiba.se/ontology#quantityAmount> ?x9.\n\t\t}\n\t\tORDER BY (?x9)\n\t\tLIMIT 1\n\t}\n\tBIND( ((?x5 - ?x9)) AS ?x0 )\n}\n"
     # q = parse_sparql(sparql)
     # for i in range(0, len(sparql), 25):
     #     print(f'[{i:0{len(str(len(sparql)))}d}]', sparql[i:i + 25])
